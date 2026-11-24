@@ -1,156 +1,124 @@
 /**
- * Servicio Web REST - Registro e Inicio de Sesión (GA7-220501096-AA5-EV01)
- * Aprendiz: Cristian Camilo Chaves Zamora | SENA ADSO - Ficha 3336095
- * Descripción: API desarrollada en Node.js y Express que gestiona el registro
- * de usuarios y valida credenciales de inicio de sesión retornando mensajes
- * de autenticación satisfactoria o error en la autenticación.
+ * Proyecto Formativo: TEJOGEST PRO - Sistema de Gestión de Canchas de Tejo
+ * Evidencia: GA7-220501096-AA5-EV03 - Diseño y desarrollo de servicios web - proyecto
+ * Aprendiz: Cristian Camilo Chaves Zamora
  */
 
-const express = require("express");
+const express = require('express');
 const app = express();
 const PORT = 3000;
 
-// Middleware para interpretar cuerpos de petición en formato JSON
+// Middleware para interpretar peticiones en formato JSON
 app.use(express.json());
 
-// Almacenamiento en memoria con un usuario base precargado para pruebas inmediatas
-const usuariosRegistrados = [
-  {
-    id: 1,
-    usuario: "cristian.chaves",
-    contrasena: "Tejo2026*",
-    nombreCompleto: "Cristian Camilo Chaves Zamora",
-    rol: "Administrador",
-  },
+// ==========================================
+// DATOS EN MEMORIA (Simulación de Base de Datos)
+// ==========================================
+let usuarios = [
+    { id: 1, usuario: 'admin', password: '123', rol: 'Administrador' }
 ];
 
-/**
- * Endpoint GET /
- * Verifica el estado operativo del servicio web y lista las rutas disponibles.
- */
-app.get("/", (req, res) => {
-  res.status(200).json({
-    servicio: "API de Autenticación - Caso GA7-220501096-AA5-EV01",
-    estado: "Activo",
-    endpoints: {
-      registro: "POST /api/auth/registro",
-      login: "POST /api/auth/login",
-      listarUsuarios: "GET /api/auth/usuarios",
-    },
-  });
+let canchas = [
+    { id: 1, nombre: 'Cancha 1 - Principal', tipo: 'Tejo Tradicional', estado: 'Disponible', tarifaHora: 25000 },
+    { id: 2, nombre: 'Cancha 2 - Cubierta', tipo: 'Mini Tejo', estado: 'Disponible', tarifaHora: 20000 }
+];
+
+let reservas = [
+    { id: 1, cliente: 'Carlos Pérez', telefono: '3105551234', canchaId: 1, fecha: '2026-11-25', hora: '18:00', estado: 'Confirmada' }
+];
+
+// ==========================================
+// 1. SERVICIO DE AUTENTICACIÓN (Inicio de sesión)
+// ==========================================
+app.post('/api/auth/login', (req, res) => {
+    const { usuario, password } = req.body;
+
+    if (!usuario || !password) {
+        return res.status(400).json({ error: 'Debe enviar usuario y contraseña.' });
+    }
+
+    const userFound = usuarios.find(u => u.usuario === usuario && u.password === password);
+    if (!userFound) {
+        return res.status(401).json({ error: 'Error en la autenticación: credenciales inválidas.' });
+    }
+
+    res.status(200).json({
+        mensaje: 'Autenticación satisfactoria',
+        usuario: { id: userFound.id, usuario: userFound.usuario, rol: userFound.rol }
+    });
 });
 
-/**
- * Endpoint POST /api/auth/registro
- * Recibe usuario, contrasena y nombreCompleto en el cuerpo JSON.
- * Valida que los datos obligatorios existan y que el usuario no esté duplicado.
- */
-app.post("/api/auth/registro", (req, res) => {
-  const { usuario, contrasena, nombreCompleto } = req.body;
-
-  // Validación de campos obligatorios
-  if (!usuario || !contrasena) {
-    return res.status(400).json({
-      exito: false,
-      mensaje: "Error en el registro: debe enviar usuario y contraseña.",
-    });
-  }
-
-  // Verificación de duplicidad de nombre de usuario
-  const usuarioExistente = usuariosRegistrados.find(
-    (item) => item.usuario.toLowerCase() === usuario.trim().toLowerCase()
-  );
-
-  if (usuarioExistente) {
-    return res.status(409).json({
-      exito: false,
-      mensaje: "Error en el registro: el nombre de usuario ya se encuentra registrado.",
-    });
-  }
-
-  // Creación del nuevo registro
-  const nuevoUsuario = {
-    id: usuariosRegistrados.length + 1,
-    usuario: usuario.trim(),
-    contrasena: contrasena.trim(),
-    nombreCompleto: nombreCompleto ? nombreCompleto.trim() : "Usuario Registrado",
-    rol: "Operador",
-  };
-
-  usuariosRegistrados.push(nuevoUsuario);
-
-  return res.status(201).json({
-    exito: true,
-    mensaje: "Registro de usuario satisfactorio.",
-    datos: {
-      id: nuevoUsuario.id,
-      usuario: nuevoUsuario.usuario,
-      nombreCompleto: nuevoUsuario.nombreCompleto,
-      rol: nuevoUsuario.rol,
-    },
-  });
+// ==========================================
+// 2. SERVICIO DE GESTIÓN DE CANCHAS
+// ==========================================
+// Consultar todas las canchas
+app.get('/api/canchas', (req, res) => {
+    res.status(200).json({ total: canchas.length, canchas });
 });
 
-/**
- * Endpoint POST /api/auth/login
- * Recibe usuario y contrasena; valida coincidencia contra los usuarios registrados.
- * Responde con autenticación satisfactoria (HTTP 200) o error en la autenticación (HTTP 401).
- */
-app.post("/api/auth/login", (req, res) => {
-  const { usuario, contrasena } = req.body;
+// Actualizar estado de una cancha (Disponible / Ocupada / Mantenimiento)
+app.put('/api/canchas/:id', (req, res) => {
+    const id = parseInt(req.params.id);
+    const { estado } = req.body;
+    const cancha = canchas.find(c => c.id === id);
 
-  // Validación de presencia de credenciales
-  if (!usuario || !contrasena) {
-    return res.status(400).json({
-      autenticado: false,
-      mensaje: "Error en la autenticación: debe ingresar usuario y contraseña.",
-    });
-  }
+    if (!cancha) {
+        return res.status(404).json({ error: 'Cancha no encontrada.' });
+    }
 
-  // Búsqueda y verificación exacta de credenciales
-  const usuarioValido = usuariosRegistrados.find(
-    (item) =>
-      item.usuario === usuario.trim() && item.contrasena === contrasena.trim()
-  );
-
-  if (!usuarioValido) {
-    return res.status(401).json({
-      autenticado: false,
-      mensaje: "Error en la autenticación: usuario o contraseña incorrectos.",
-    });
-  }
-
-  return res.status(200).json({
-    autenticado: true,
-    mensaje: "Autenticación satisfactoria.",
-    usuario: {
-      id: usuarioValido.id,
-      usuario: usuarioValido.usuario,
-      nombreCompleto: usuarioValido.nombreCompleto,
-      rol: usuarioValido.rol,
-    },
-  });
+    cancha.estado = estado || cancha.estado;
+    res.status(200).json({ mensaje: 'Estado de cancha actualizado correctamente.', cancha });
 });
 
-/**
- * Endpoint GET /api/auth/usuarios
- * Permite consultar los usuarios registrados (sin exponer contraseñas).
- */
-app.get("/api/auth/usuarios", (req, res) => {
-  const listadoSeguro = usuariosRegistrados.map(({ id, usuario, nombreCompleto, rol }) => ({
-    id,
-    usuario,
-    nombreCompleto,
-    rol,
-  }));
-
-  res.status(200).json({
-    total: listadoSeguro.length,
-    usuarios: listadoSeguro,
-  });
+// ==========================================
+// 3. SERVICIO DE GESTIÓN DE RESERVAS
+// ==========================================
+// Listar todas las reservas
+app.get('/api/reservas', (req, res) => {
+    res.status(200).json({ total: reservas.length, reservas });
 });
 
-// Inicialización del servidor HTTP
+// Crear una nueva reserva
+app.post('/api/reservas', (req, res) => {
+    const { cliente, telefono, canchaId, fecha, hora } = req.body;
+
+    if (!cliente || !canchaId || !fecha || !hora) {
+        return res.status(400).json({ error: 'Faltan campos obligatorios (cliente, canchaId, fecha, hora).' });
+    }
+
+    const canchaExiste = canchas.find(c => c.id === parseInt(canchaId));
+    if (!canchaExiste) {
+        return res.status(404).json({ error: 'La cancha seleccionada no existe.' });
+    }
+
+    const nuevaReserva = {
+        id: reservas.length + 1,
+        cliente,
+        telefono: telefono || 'Sin teléfono',
+        canchaId: parseInt(canchaId),
+        fecha,
+        hora,
+        estado: 'Confirmada'
+    };
+
+    reservas.push(nuevaReserva);
+    res.status(201).json({ mensaje: 'Reserva registrada exitosamente.', reserva: nuevaReserva });
+});
+
+// Cancelar / eliminar una reserva
+app.delete('/api/reservas/:id', (req, res) => {
+    const id = parseInt(req.params.id);
+    const index = reservas.findIndex(r => r.id === id);
+
+    if (index === -1) {
+        return res.status(404).json({ error: 'Reserva no encontrada.' });
+    }
+
+    const eliminada = reservas.splice(index, 1);
+    res.status(200).json({ mensaje: 'Reserva cancelada correctamente.', reserva: eliminada[0] });
+});
+
+// Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`Servidor de autenticación ejecutándose en http://localhost:${PORT}`);
+    console.log(`Servidor TEJOGEST PRO corriendo en http://localhost:${PORT}`);
 });
